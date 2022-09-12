@@ -46,6 +46,12 @@ module Hetzner
       puts
     end
 
+    def find_ssh_key_by_label(key:, value:)
+      default_ssh_key_ids = hetzner_client.get('/ssh_keys')['ssh_keys'].select do |ssh_key|
+        ssh_key['labels'][key] == value
+      end
+    end
+
     private
 
     attr_reader :hetzner_client, :cluster_name, :public_ssh_key_path
@@ -75,12 +81,6 @@ module Hetzner
       end
 
       key
-    end
-
-    def find_ssh_key_by_label(key:, value:)
-      default_ssh_key_ids = hetzner_client.get('/ssh_keys')['ssh_keys'].select do |ssh_key|
-        ssh_key['labels'][key] == value
-      end
     end
   end
 end
