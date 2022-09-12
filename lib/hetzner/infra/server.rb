@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'activesupport'
+
 module Hetzner
   class Server
     def initialize(hetzner_client:, cluster_name:)
