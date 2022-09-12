@@ -25,7 +25,7 @@ module Hetzner
       puts '...SSH key created.'
       puts
 
-      JSON.parse(response)['ssh_key']['id']
+      JSON.parse(response)['ssh_key']
     end
 
     def delete(public_ssh_key_path:)
@@ -48,10 +48,6 @@ module Hetzner
 
     def find_ssh_keys_by_label(key:, value:)
       hetzner_client.get('/ssh_keys')['ssh_keys'].select do |ssh_key|
-        p ssh_key['labels']
-        p key
-        p ssh_key['labels'][key]
-        p value
         ssh_key['labels'][key].to_s == value.to_s
       end
     end

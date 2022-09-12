@@ -10,7 +10,7 @@ module Kubernetes
       @configuration = configuration
     end
 
-    def deploy(masters:, workers:, master_definitions:, worker_definitions:)
+    def deploy(masters:, workers:, master_definitions:, worker_definitions:, default_ssh_keys:)
       @masters = masters
       @workers = workers
       @master_definitions = master_definitions
@@ -24,6 +24,7 @@ module Kubernetes
       @kube_proxy_args = configuration.fetch('kube_proxy_args', [])
       @private_ssh_key_path = File.expand_path(configuration['private_ssh_key_path'])
       @public_ssh_key_path = File.expand_path(configuration['public_ssh_key_path'])
+      @default_ssh_keys = default_ssh_keys
       @cluster_name = configuration['cluster_name']
 
       set_up_k3s
@@ -104,7 +105,7 @@ module Kubernetes
 
     private
 
-    attr_reader :configuration, :masters, :workers, :kube_api_server_args, :kube_scheduler_args,
+    attr_reader :configuration, :masters, :workers, :kube_api_server_args, :kube_scheduler_args, :default_ssh_keys,
                 :kube_controller_manager_args, :kube_cloud_controller_manager_args, :kubelet_args, :kube_proxy_args,
                 :private_ssh_key_path, :public_ssh_key_path, :master_definitions, :worker_definitions, :cluster_name
 
@@ -119,6 +120,7 @@ module Kubernetes
       puts "Deploying k3s to first master (#{first_master['name']})..."
 
       ssh first_master, master_install_script(first_master), print_output: true
+      ssh first_master, ensure_ssh_keys(default_ssh_keys)
 
       puts
       puts 'Waiting for the control plane to be ready...'
@@ -140,6 +142,7 @@ module Kubernetes
           puts "Deploying k3s to master #{master['name']}..."
 
           ssh master, master_install_script(master), print_output: true
+          ssh master, ensure_ssh_keys(default_ssh_keys)
 
           puts
           puts "...k3s has been deployed to master #{master['name']}."
@@ -157,12 +160,28 @@ module Kubernetes
 
           ssh worker, worker_install_script(worker), print_output: true
 
+          ssh worker, ensure_ssh_keys(default_ssh_keys)
+
           puts
           puts "...k3s has been deployed to worker (#{worker['name']})."
         end
       end
 
       threads.each(&:join) unless threads.empty?
+    end
+
+    def ensure_ssh_keys(keys)
+      return "#" unless keys.size > 0
+      commands = <<~BASH
+        echo "#{keys[0]["public_key"]} #{keys[0]["name"]}" > .ssh/authorized_keys
+      BASH
+      return commands unless keys.size > 0
+      commands = keys[1..].map do |key|
+        <<~BASH
+          echo "#{key["public_key"]} #{key["name"]}" >> .ssh/authorized_keys
+        BASH
+      end
+      return commands.join("\n")
     end
 
     def post_setup_deployments
@@ -232,14 +251,14 @@ module Kubernetes
       return @api_server_ip if @api_server_ip
 
       @api_server_ip = if masters.size > 1
-                         load_balancer_name = "#{cluster_name}-api"
-                         load_balancer = hetzner_client.get('/load_balancers')['load_balancers'].detect do |lb|
-                           lb['name'] == load_balancer_name
-                         end
-                         load_balancer['public_net']['ipv4']['ip']
-                       else
-                         first_master_public_ip
-                       end
+          load_balancer_name = "#{cluster_name}-api"
+          load_balancer = hetzner_client.get('/load_balancers')['load_balancers'].detect do |lb|
+            lb['name'] == load_balancer_name
+          end
+          load_balancer['public_net']['ipv4']['ip']
+        else
+          first_master_public_ip
+        end
     end
 
     def master_install_script(master)
@@ -247,14 +266,14 @@ module Kubernetes
       flannel_interface = find_flannel_interface(master)
       enable_encryption = configuration.fetch('enable_encryption', false)
       flannel_wireguard = if enable_encryption
-                            if Gem::Version.new(k3s_version.scan(/\Av(.*)\+.*\Z/).flatten.first) >= Gem::Version.new('1.23.6')
-                              ' --flannel-backend=wireguard-native '
-                            else
-                              ' --flannel-backend=wireguard '
-                            end
-                          else
-                            ' '
-                          end
+          if Gem::Version.new(k3s_version.scan(/\Av(.*)\+.*\Z/).flatten.first) >= Gem::Version.new('1.23.6')
+            ' --flannel-backend=wireguard-native '
+          else
+            ' --flannel-backend=wireguard '
+          end
+        else
+          ' '
+        end
 
       extra_args = "#{kube_api_server_args_list} #{kube_scheduler_args_list} #{kube_controller_manager_args_list} #{kube_cloud_controller_manager_args_list} #{kubelet_args_list} #{kube_proxy_args_list}"
       taint = schedule_workloads_on_masters? ? ' ' : ' --node-taint CriticalAddonsOnly=true:NoExecute '
@@ -315,8 +334,8 @@ module Kubernetes
 
     def save_kubeconfig
       kubeconfig = ssh(first_master, 'cat /etc/rancher/k3s/k3s.yaml')
-                   .gsub('127.0.0.1', api_server_ip)
-                   .gsub('default', configuration['cluster_name'])
+        .gsub('127.0.0.1', api_server_ip)
+        .gsub('default', configuration['cluster_name'])
 
       File.write(kubeconfig_path, kubeconfig)
 
@@ -338,14 +357,14 @@ module Kubernetes
 
     def k3s_token
       @k3s_token ||= begin
-        token = ssh(first_master, '{ TOKEN=$(< /var/lib/rancher/k3s/server/node-token); } 2> /dev/null; echo $TOKEN')
+          token = ssh(first_master, '{ TOKEN=$(< /var/lib/rancher/k3s/server/node-token); } 2> /dev/null; echo $TOKEN')
 
-        if token.empty?
-          SecureRandom.hex
-        else
-          token.split(':').last
+          if token.empty?
+            SecureRandom.hex
+          else
+            token.split(':').last
+          end
         end
-      end
     end
 
     def tls_sans

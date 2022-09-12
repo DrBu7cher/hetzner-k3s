@@ -39,7 +39,7 @@ class Cluster
 
     create_resources
 
-    kubernetes_client.deploy(masters: masters, workers: workers, master_definitions: master_definitions_for_create, worker_definitions: workers_definitions_for_marking)
+    kubernetes_client.deploy(masters: masters, workers: workers, master_definitions: master_definitions_for_create, worker_definitions: workers_definitions_for_marking, default_ssh_keys: [k3s_ssh_key] + default_ssh_keys)
   end
 
   def delete
@@ -127,8 +127,26 @@ class Cluster
     @network_id ||= Hetzner::Network.new(hetzner_client: hetzner_client, cluster_name: cluster_name, existing_network: existing_network).create(location: masters_location)
   end
 
-  def ssh_key_id
-    @ssh_key_id ||= Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(public_ssh_key_path: public_ssh_key_path)
+  def k3s_ssh_key
+    @k3s_ssh_key ||= Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(public_ssh_key_path: public_ssh_key_path)
+  end
+
+  def k3s_ssh_key_id
+    k3s_ssh_key['id']
+  end
+
+  def default_ssh_keys
+    return @default_ssh_keys unless @default_ssh_keys == nil
+    tmp_ssh_key_arr = []
+
+    default_ssh_key_labels.map do |label|
+      key, value = label.first
+      Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_keys_by_label(key: key, value: value).each do |ssh_key|
+        tmp_ssh_key_arr << ssh_key
+      end
+    end
+
+    @default_ssh_keys = tmp_ssh_key_arr
   end
 
   def default_ssh_key_ids
@@ -136,13 +154,8 @@ class Cluster
 
     tmp_ssh_key_ids = []
 
-    p default_ssh_key_labels
-
-    default_ssh_key_labels.map do |label|
-      key, value = label.first
-      Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_keys_by_label(key: key, value: value).each do |ssh_key|
-        tmp_ssh_key_ids << ssh_key['id']
-      end
+    default_ssh_keys.each do |ssh_key|
+      tmp_ssh_key_ids << ssh_key['id']
     end
 
     @default_ssh_key_ids = tmp_ssh_key_ids
@@ -161,7 +174,7 @@ class Cluster
         placement_group_id: placement_group_id,
         firewall_id: firewall_id,
         network_id: network_id,
-        ssh_key_id: ssh_key_id,
+        ssh_key_id: k3s_ssh_key_id,
         default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
@@ -205,7 +218,7 @@ class Cluster
         location: worker_location,
         firewall_id: firewall_id,
         network_id: network_id,
-        ssh_key_id: ssh_key_id,
+        ssh_key_id: k3s_ssh_key_id,
         default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
