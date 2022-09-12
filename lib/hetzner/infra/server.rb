@@ -7,13 +7,14 @@ module Hetzner
       @cluster_name = cluster_name
     end
 
-    def create(location:, instance_type:, instance_id:, firewall_id:, network_id:, ssh_key_id:, placement_group_id:, image:, additional_packages: [], additional_post_create_commands: [])
+    def create(location:, instance_type:, instance_id:, firewall_id:, network_id:, ssh_key_id:, default_ssh_key_ids:, placement_group_id:, image:, additional_packages: [], additional_post_create_commands: [])
       @location = location
       @instance_type = instance_type
       @instance_id = instance_id
       @firewall_id = firewall_id
       @network_id = network_id
       @ssh_key_id = ssh_key_id
+      @default_ssh_key_ids = default_ssh_key_ids
       @placement_group_id = placement_group_id
       @image = image
       @additional_packages = additional_packages
@@ -40,6 +41,10 @@ module Hetzner
       end
     end
 
+    def ssh_key_ids
+      @ssh_key_ids ||= [@ssh_key_id] + @default_ssh_key_ids
+    end
+
     def delete(server_name:)
       if (server = find_server(server_name))
         puts "Deleting server #{server_name}..."
@@ -52,7 +57,7 @@ module Hetzner
 
     private
 
-    attr_reader :hetzner_client, :cluster_name, :location, :instance_type, :instance_id, :firewall_id, :network_id, :ssh_key_id, :placement_group_id, :image, :additional_packages, :additional_post_create_commands
+    attr_reader :hetzner_client, :cluster_name, :location, :instance_type, :instance_id, :firewall_id, :network_id, :placement_group_id, :image, :additional_packages, :additional_post_create_commands
 
     def find_server(server_name)
       hetzner_client.get('/servers?sort=created:desc')['servers'].detect { |network| network['name'] == server_name }
@@ -83,9 +88,7 @@ module Hetzner
           network_id
         ],
         server_type: instance_type,
-        ssh_keys: [
-          ssh_key_id
-        ],
+        ssh_keys: ssh_key_ids,
         user_data: user_data,
         labels: {
           cluster: cluster_name,

@@ -35,6 +35,7 @@ class Cluster
     @api_networks = configuration['api_allowed_networks']
     @private_ssh_key_path = File.expand_path(configuration['private_ssh_key_path'])
     @public_ssh_key_path = File.expand_path(configuration['public_ssh_key_path'])
+    @default_ssh_key_labels = configuration['default_ssh_key_labels']
 
     create_resources
 
@@ -69,7 +70,7 @@ class Cluster
               :masters_location, :private_ssh_key_path, :public_ssh_key_path,
               :hetzner_token, :new_k3s_version,
               :config_file, :ssh_networks,
-              :api_networks
+              :api_networks, :default_ssh_key_labels
 
   def find_worker_node_pools(configuration)
     configuration.fetch('worker_node_pools', [])
@@ -130,6 +131,12 @@ class Cluster
     @ssh_key_id ||= Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(public_ssh_key_path: public_ssh_key_path)
   end
 
+  def default_ssh_key_ids
+    @default_ssh_key_ids ||= default_ssh_key_labels.map do |key,value|
+      Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_key_by_label(key: key, value: value)
+    end
+  end
+
   def master_definitions_for_create
     definitions = []
 
@@ -142,6 +149,7 @@ class Cluster
         firewall_id: firewall_id,
         network_id: network_id,
         ssh_key_id: ssh_key_id,
+        default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
         additional_post_create_commands: additional_post_create_commands,
@@ -185,6 +193,7 @@ class Cluster
         firewall_id: firewall_id,
         network_id: network_id,
         ssh_key_id: ssh_key_id,
+        default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
         additional_post_create_commands: additional_post_create_commands,
