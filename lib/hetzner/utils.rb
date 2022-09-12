@@ -90,11 +90,11 @@ module Utils
   rescue Timeout::Error, IOError, Errno::EBADF => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
-    retry unless retries > 15
+    retry if retries <= 15
   rescue Net::SSH::Disconnect => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
-    retry unless retries > 15 || e.message =~ /Too many authentication failures/
+    retry if retries <= 15 || e.message =~ /Too many authentication failures/
   rescue Net::SSH::ConnectionTimeout, Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EHOSTUNREACH => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1

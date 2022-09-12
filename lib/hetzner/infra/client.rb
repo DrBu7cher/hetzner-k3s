@@ -44,7 +44,8 @@ module Hetzner
         block.call
       end
     rescue Timeout::Error
-      retry if (retries += 1) < 3
+      retries += 1
+      retry if retries <= 3
     end
   end
 end
