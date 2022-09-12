@@ -52,7 +52,7 @@ module Hetzner
         p key
         p ssh_key['labels'][key]
         p value
-        ssh_key['labels'][key].to_s == value.to_s
+        ssh_key['labels'][key.to_s].to_s == value.to_s
       end
     end
 
