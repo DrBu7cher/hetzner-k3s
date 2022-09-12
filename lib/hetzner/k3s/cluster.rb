@@ -132,7 +132,7 @@ class Cluster
   end
 
   def default_ssh_key_ids
-    @default_ssh_key_ids ||= default_ssh_key_labels.map do |key,value|
+    @default_ssh_key_ids ||= default_ssh_key_labels.map do |key, value|
       Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_key_by_label(key: key, value: value)
     end
   end
@@ -154,7 +154,7 @@ class Cluster
         additional_packages: additional_packages,
         additional_post_create_commands: additional_post_create_commands,
         labels: masters_config['labels'],
-        taints: masters_config['taints']
+        taints: masters_config['taints'],
       }
     end
 
@@ -167,7 +167,7 @@ class Cluster
     masters_count.times do |i|
       definitions << {
         instance_type: master_instance_type,
-        instance_id: "master#{i + 1}"
+        instance_id: "master#{i + 1}",
       }
     end
 
@@ -198,7 +198,7 @@ class Cluster
         additional_packages: additional_packages,
         additional_post_create_commands: additional_post_create_commands,
         labels: labels,
-        taints: taints
+        taints: taints,
       }
     end
 
