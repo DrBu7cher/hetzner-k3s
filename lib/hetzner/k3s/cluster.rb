@@ -148,6 +148,8 @@ class Cluster
   def master_definitions_for_create
     definitions = []
 
+    p default_ssh_key_ids
+
     masters_count.times do |i|
       definitions << {
         instance_type: master_instance_type,
