@@ -57,7 +57,7 @@ module Hetzner
     def ssh_key_config
       {
         name: cluster_name,
-        public_key: public_ssh_key
+        public_key: public_ssh_key,
       }
     end
 
@@ -81,5 +81,6 @@ module Hetzner
       default_ssh_key_ids = hetzner_client.get('/ssh_keys')['ssh_keys'].select do |ssh_key|
         ssh_key['labels'][key] == value
       end
+    end
   end
 end
