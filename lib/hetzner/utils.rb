@@ -49,7 +49,7 @@ module Utils
   end
 
   def wait_for_ssh(server)
-    retries = 0
+    retries ||= 0
 
     Timeout.timeout(5) do
       server_name = server['name']
@@ -70,7 +70,7 @@ module Utils
 
   def ssh(server, command, print_output: false)
     debug = ENV.fetch('SSH_DEBUG', false)
-    retries = 0
+    retries ||= 0
 
     public_ip = server.dig('public_net', 'ipv4', 'ip')
     output = ''
