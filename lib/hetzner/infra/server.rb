@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'activesupport'
+require 'active_support'
 
 module Hetzner
   class Server
