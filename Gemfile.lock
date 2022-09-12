@@ -79,6 +79,7 @@ PLATFORMS
   x86_64-darwin-21
 
 DEPENDENCIES
+  activesupport
   bcrypt_pbkdf (~> 1.0)
   childprocess
   ed25519 (~> 1.2)
