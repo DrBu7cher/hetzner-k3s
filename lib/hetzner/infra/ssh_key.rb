@@ -47,9 +47,13 @@ module Hetzner
     end
 
     def find_ssh_keys_by_label(key:, value:)
-      hetzner_client.get('/ssh_keys')['ssh_keys'].select { |ssh_key|
+      hetzner_client.get('/ssh_keys')['ssh_keys'].select do |ssh_key|
+        p ssh_key['labels']
+        p key
+        p ssh_key['labels'][key]
+        p value
         ssh_key['labels'][key] == value
-      }
+      end
     end
 
     private
