@@ -138,7 +138,8 @@ class Cluster
 
     p default_ssh_key_labels
 
-    default_ssh_key_labels.map do |key, value|
+    default_ssh_key_labels.map do |label|
+      key, value = label.first
       Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_keys_by_label(key: key, value: value).each do |ssh_key|
         tmp_ssh_key_ids << ssh_key['id']
       end
