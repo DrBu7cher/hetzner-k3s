@@ -132,9 +132,17 @@ class Cluster
   end
 
   def default_ssh_key_ids
-    @default_ssh_key_ids ||= default_ssh_key_labels.map do |key, value|
-      Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_key_by_label(key: key, value: value)
+    return @default_ssh_key_ids unless @default_ssh_key_ids == nil
+
+    tmp_ssh_key_ids = []
+
+    default_ssh_key_labels.map do |key, value|
+      Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).find_ssh_keys_by_label(key: key, value: value).each do |ssh_key|
+        tmp_ssh_key_ids << ssh_key['id']
+      end
     end
+
+    @default_ssh_key_ids = tmp_ssh_key_ids
   end
 
   def master_definitions_for_create
