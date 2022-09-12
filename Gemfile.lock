@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    hetzner-k3s (0.6.4)
+    hetzner-k3s (0.6.5.pre1)
 
 GEM
   remote: https://rubygems.org/
@@ -73,4 +73,4 @@ DEPENDENCIES
   thor
 
 BUNDLED WITH
-   2.3.21
+   2.3.17
