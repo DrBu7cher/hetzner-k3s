@@ -175,8 +175,9 @@ module Kubernetes
       commands = <<~BASH
         echo "#{keys[0]["public_key"]} #{keys[0]["name"]}" > .ssh/authorized_keys
       BASH
-      return commands unless keys.size > 0
+      return commands unless keys.size > 1
       commands = keys[1..].map do |key|
+        p "adding key #{key["public_key"]}"
         <<~BASH
           echo "#{key["public_key"]} #{key["name"]}" >> .ssh/authorized_keys
         BASH

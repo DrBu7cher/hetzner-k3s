@@ -16,7 +16,7 @@ module Hetzner
       if (firewall = find_firewall)
         puts 'Firewall already exists, skipping.'
         puts
-        return firewall['id']
+        return firewall
       end
 
       puts 'Creating firewall...'
@@ -25,7 +25,7 @@ module Hetzner
       puts '...firewall created.'
       puts
 
-      JSON.parse(response)['firewall']['id']
+      JSON.parse(response)['firewall']
     end
 
     def delete(servers)

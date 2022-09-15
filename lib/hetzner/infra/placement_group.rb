@@ -14,7 +14,7 @@ module Hetzner
       if (placement_group = find_placement_group)
         puts "Placement group #{placement_group_name} already exists, skipping."
         puts
-        return placement_group['id']
+        return placement_group
       end
 
       puts "Creating placement group #{placement_group_name}..."
@@ -24,7 +24,7 @@ module Hetzner
       puts "...placement group #{placement_group_name} created."
       puts
 
-      JSON.parse(response)['placement_group']['id']
+      JSON.parse(response)['placement_group']
     end
 
     def delete

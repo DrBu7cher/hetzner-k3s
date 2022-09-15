@@ -15,7 +15,7 @@ module Hetzner
       if (public_ssh_key = find_public_ssh_key)
         puts 'SSH key already exists, skipping.'
         puts
-        return public_ssh_key['id']
+        return public_ssh_key
       end
 
       puts 'Creating SSH key...'

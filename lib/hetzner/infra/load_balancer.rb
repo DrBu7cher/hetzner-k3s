@@ -16,7 +16,7 @@ module Hetzner
       if (load_balancer = find_load_balancer)
         puts 'API load balancer already exists, skipping.'
         puts
-        return load_balancer['id']
+        return load_balancer
       end
 
       puts 'Creating API load_balancer...'
@@ -25,7 +25,7 @@ module Hetzner
       puts '...API load balancer created.'
       puts
 
-      JSON.parse(response)['load_balancer']['id']
+      JSON.parse(response)['load_balancer']
     end
 
     def delete(high_availability:)

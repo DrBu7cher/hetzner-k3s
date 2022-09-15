@@ -15,7 +15,7 @@ module Hetzner
       if (network = find_network)
         puts 'Private network already exists, skipping.'
         puts
-        return network['id']
+        return network
       end
 
       puts 'Creating private network...'
@@ -25,7 +25,7 @@ module Hetzner
       puts '...private network created.'
       puts
 
-      JSON.parse(response)['network']['id']
+      JSON.parse(response)['network']
     end
 
     def delete
