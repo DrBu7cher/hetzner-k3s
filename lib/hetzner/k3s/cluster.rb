@@ -117,22 +117,19 @@ class Cluster
   def placement_group_id(pool_name = nil)
     @placement_groups ||= {}
     @placement_groups[pool_name || '__masters__'] ||= Hetzner::PlacementGroup.new(hetzner_client: hetzner_client, cluster_name: cluster_name, pool_name: pool_name).create
+    @placement_groups[pool_name || '__masters__']['id']
   end
 
-  def firewall_id
-    @firewall_id ||= Hetzner::Firewall.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(high_availability: (masters_count > 1), ssh_networks: ssh_networks, api_networks: api_networks)
+  def firewall
+    @firewall ||= Hetzner::Firewall.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(high_availability: (masters_count > 1), ssh_networks: ssh_networks, api_networks: api_networks)
   end
 
-  def network_id
-    @network_id ||= Hetzner::Network.new(hetzner_client: hetzner_client, cluster_name: cluster_name, existing_network: existing_network).create(location: masters_location)
+  def network
+    @network ||= Hetzner::Network.new(hetzner_client: hetzner_client, cluster_name: cluster_name, existing_network: existing_network).create(location: masters_location)
   end
 
   def k3s_ssh_key
     @k3s_ssh_key ||= Hetzner::SSHKey.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(public_ssh_key_path: public_ssh_key_path)
-  end
-
-  def k3s_ssh_key_id
-    k3s_ssh_key['id']
   end
 
   def default_ssh_keys
@@ -172,9 +169,9 @@ class Cluster
         instance_id: "master#{i + 1}",
         location: masters_location,
         placement_group_id: placement_group_id,
-        firewall_id: firewall_id,
-        network_id: network_id,
-        ssh_key_id: k3s_ssh_key_id,
+        firewall_id: firewall['id'],
+        network_id: network['id'],
+        ssh_key_id: k3s_ssh_key['id'],
         default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
@@ -216,9 +213,9 @@ class Cluster
         instance_id: "pool-#{worker_node_pool_name}-worker#{i + 1}",
         placement_group_id: placement_group_id(worker_node_pool_name),
         location: worker_location,
-        firewall_id: firewall_id,
-        network_id: network_id,
-        ssh_key_id: k3s_ssh_key_id,
+        firewall_id: firewall['id'],
+        network_id: network['id'],
+        ssh_key_id: k3s_ssh_key['id'],
         default_ssh_key_ids: default_ssh_key_ids,
         image: image,
         additional_packages: additional_packages,
@@ -299,8 +296,8 @@ class Cluster
 
     sleep 1 while servers.size != server_configs.size
 
-    if servers.any?{ |server| server.nil? } then
-      raise StandardError, "Encountered error during server creation. (Found Nil in server array)"
+    if servers.any? { |server| server.nil? }
+      raise StandardError, 'Encountered error during server creation. (Found Nil in server array)'
     end
 
     wait_for_servers(servers)
@@ -325,7 +322,7 @@ class Cluster
   end
 
   def create_load_balancer
-    Hetzner::LoadBalancer.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(location: masters_location, network_id: network_id)
+    Hetzner::LoadBalancer.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(location: masters_location, network_id: network["id"])
   end
 
   def existing_network
