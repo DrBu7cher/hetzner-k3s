@@ -299,6 +299,10 @@ class Cluster
 
     sleep 1 while servers.size != server_configs.size
 
+    if servers.any?{ |server| server.nil? } then
+      raise StandardError, "Encountered error during server creation. (Found Nil in server array)"
+    end
+
     wait_for_servers(servers)
   end
 

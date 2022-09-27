@@ -43,6 +43,7 @@ module Hetzner
         puts
 
         p error
+        return nil
       end
     end
 
