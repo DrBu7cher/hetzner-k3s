@@ -51,7 +51,7 @@ module Utils
   def wait_for_ssh(server)
     retries ||= 0
 
-    Timeout.timeout(5) do
+    Timeout.timeout(10) do
       server_name = server['name']
 
       puts "Waiting for server #{server_name} to be up..."
@@ -59,6 +59,7 @@ module Utils
       loop do
         result = ssh(server, 'cat /etc/ready')
         break if result == 'true'
+        sleep 3
       end
 
       puts "...server #{server_name} is now up."
@@ -90,14 +91,17 @@ module Utils
   rescue Timeout::Error, IOError, Errno::EBADF => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
+    sleep 1
     retry if retries <= 15
   rescue Net::SSH::Disconnect => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
+    sleep 1
     retry if retries <= 15 || e.message =~ /Too many authentication failures/
   rescue Net::SSH::ConnectionTimeout, Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EHOSTUNREACH => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
+    sleep 1
     retry if retries <= 15
   rescue Net::SSH::AuthenticationFailed => e
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
