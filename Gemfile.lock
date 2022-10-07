@@ -7,6 +7,7 @@ PATH
       childprocess
       ed25519 (~> 1.2)
       httparty
+      net-http
       net-ssh
       sshkey
       thor
@@ -35,6 +36,8 @@ GEM
     mime-types-data (3.2022.0105)
     minitest (5.16.3)
     multi_xml (0.6.0)
+    net-http (0.2.2)
+      uri
     net-ssh (7.0.1)
     parallel (1.20.1)
     parser (3.1.2.1)
@@ -73,6 +76,7 @@ GEM
     tzinfo (2.0.5)
       concurrent-ruby (~> 1.0)
     unicode-display_width (2.2.0)
+    uri (0.11.0)
 
 PLATFORMS
   ruby

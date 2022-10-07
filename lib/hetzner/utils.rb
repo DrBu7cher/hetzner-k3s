@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'childprocess'
+require 'net/ssh/proxy/command'
 
 module Utils
   CMD_FILE_PATH = '/tmp/cli.cmd'
@@ -71,9 +72,9 @@ module Utils
 
   def ssh(server, command, print_output: false)
     debug = ENV.fetch('SSH_DEBUG', false)
+
     retries ||= 0
 
-    public_ip = server.dig('public_net', 'ipv4', 'ip')
     output = ''
 
     params = { verify_host_key: (verify_host_key ? :always : :never) }
@@ -81,7 +82,14 @@ module Utils
     params[:keys] = private_ssh_key_path && [private_ssh_key_path]
     params[:verbose] = :debug if debug
 
-    Net::SSH.start(public_ip, 'root', params) do |session|
+    if server['_jumphost']
+      params[:proxy] = Net::SSH::Proxy::Command.new('ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l root -p 22 -W %h:%p 88.99.39.65 2>/dev/null')
+      target_ip = server.dig('private_net', 0, 'ip')
+    else
+      target_ip = server.dig('public_net', 'ipv4', 'ip')
+    end
+
+    Net::SSH.start(target_ip, 'root', params) do |session|
       session.exec!(command) do |_channel, _stream, data|
         output = "#{output}#{data}"
         puts data if print_output
@@ -99,6 +107,12 @@ module Utils
     sleep 1
     retry if retries <= 15 || e.message =~ /Too many authentication failures/
   rescue Net::SSH::ConnectionTimeout, Errno::ECONNREFUSED, Errno::ENETUNREACH, Errno::EHOSTUNREACH => e
+    puts "SSH CONNECTION DEBUG: #{e.message}" if debug
+    retries += 1
+    sleep 1
+    retry if retries <= 15
+  rescue Net::SSH::Proxy::ConnectError => e
+    # this only occurs if a jumphost is set
     puts "SSH CONNECTION DEBUG: #{e.message}" if debug
     retries += 1
     sleep 1

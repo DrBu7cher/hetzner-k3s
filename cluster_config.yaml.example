@@ -14,6 +14,12 @@ location: nbg1
 schedule_workloads_on_masters: false
 default_ssh_key_labels:
   - default: true
+
+# additional_server_settings:
+#   public_net:
+#     enable_ipv4: false
+#     enable_ipv6: true
+
 masters:
   instance_type: cpx21
   instance_count: 3

@@ -29,6 +29,7 @@ class Cluster
     @cluster_name = configuration['cluster_name']
     @masters_config = configuration['masters']
     @worker_node_pools = find_worker_node_pools(configuration)
+    @additional_server_settings = configuration['additional_server_settings']
     @masters_location = configuration['location']
     @servers = []
     @ssh_networks = configuration['ssh_allowed_networks']
@@ -67,6 +68,7 @@ class Cluster
 
   attr_reader :configuration, :cluster_name, :kubeconfig_path,
               :masters_config, :worker_node_pools,
+              :additional_server_settings, :load_balancer,
               :masters_location, :private_ssh_key_path, :public_ssh_key_path,
               :hetzner_token, :new_k3s_version,
               :config_file, :ssh_networks,
@@ -161,9 +163,15 @@ class Cluster
   def master_definitions_for_create
     definitions = []
 
-    p default_ssh_key_ids
+    additional_master_settings = JSON.parse(JSON.generate(additional_server_settings))
+    additional_master_settings['public_net']['enable_ipv4'] = false if masters_count > 1
+
+    additional_first_master_settings = JSON.parse(JSON.generate(additional_server_settings))
+    additional_first_master_settings['public_net']['enable_ipv4'] = true unless additional_master_settings['public_net'].nil? || additional_master_settings['public_net']['enable_ipv4'].nil?
 
     masters_count.times do |i|
+      add = additional_master_settings
+      add = additional_first_master_settings if i == 0
       definitions << {
         instance_type: master_instance_type,
         instance_id: "master#{i + 1}",
@@ -178,6 +186,7 @@ class Cluster
         additional_post_create_commands: additional_post_create_commands,
         labels: masters_config['labels'],
         taints: masters_config['taints'],
+        **add,
       }
     end
 
@@ -222,6 +231,7 @@ class Cluster
         additional_post_create_commands: additional_post_create_commands,
         labels: labels,
         taints: taints,
+        **additional_server_settings,
       }
     end
 
@@ -255,8 +265,8 @@ class Cluster
   end
 
   def create_resources
+    create_load_balancer if masters_count > 1
     create_servers
-    create_load_balancer if masters.size > 1
   end
 
   def delete_placement_groups
@@ -284,17 +294,23 @@ class Cluster
   def create_servers
     servers = []
 
-    threads = server_configs.map do |server_config|
+    first_master_config = server_configs[0].reject! { |k, _v| %i[labels taints].include?(k) }
+    first_master = Hetzner::Server.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(**first_master_config)
+    wait_for_ssh first_master
+
+    threads = server_configs[1..].map do |server_config|
       config = server_config.reject! { |k, _v| %i[labels taints].include?(k) }
 
       Thread.new do
-        servers << Hetzner::Server.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(**config)
+        server = Hetzner::Server.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(**config)
+        server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}" if masters_count > 1
+        servers << server
       end
     end
 
     threads.each(&:join) unless threads.empty?
 
-    sleep 1 while servers.size != server_configs.size
+    sleep 1 while servers.size != server_configs.size - 1
 
     if servers.any? { |server| server.nil? }
       raise StandardError, 'Encountered error during server creation. (Found Nil in server array)'
@@ -322,7 +338,7 @@ class Cluster
   end
 
   def create_load_balancer
-    Hetzner::LoadBalancer.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(location: masters_location, network_id: network["id"])
+    @load_balancer ||= Hetzner::LoadBalancer.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(location: masters_location, network_id: network['id'])
   end
 
   def existing_network

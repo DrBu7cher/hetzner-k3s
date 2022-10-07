@@ -9,7 +9,7 @@ module Hetzner
       @cluster_name = cluster_name
     end
 
-    def create(location:, instance_type:, instance_id:, firewall_id:, network_id:, ssh_key_id:, default_ssh_key_ids:, placement_group_id:, image:, additional_packages: [], additional_post_create_commands: [])
+    def create(location:, instance_type:, instance_id:, firewall_id:, network_id:, ssh_key_id:, default_ssh_key_ids:, placement_group_id:, image:, additional_packages: [], additional_post_create_commands: [], **additional_server_settings)
       @location = location
       @instance_type = instance_type
       @instance_id = instance_id
@@ -21,6 +21,7 @@ module Hetzner
       @image = image
       @additional_packages = additional_packages
       @additional_post_create_commands = additional_post_create_commands
+      @additional_server_settings = additional_server_settings
 
       puts
 
@@ -63,7 +64,7 @@ module Hetzner
 
     private
 
-    attr_reader :hetzner_client, :cluster_name, :location, :instance_type, :instance_id, :firewall_id, :network_id, :placement_group_id, :image, :additional_packages, :additional_post_create_commands
+    attr_reader :hetzner_client, :cluster_name, :location, :instance_type, :instance_id, :firewall_id, :network_id, :placement_group_id, :image, :additional_packages, :additional_post_create_commands, :additional_server_settings
 
     def find_server(server_name)
       hetzner_client.get('/servers?sort=created:desc')['servers'].detect { |network| network['name'] == server_name }
@@ -101,6 +102,7 @@ module Hetzner
           role: (server_name =~ /master/ ? 'master' : 'worker'),
         },
         placement_group: placement_group_id,
+        **additional_server_settings
       }
     end
 

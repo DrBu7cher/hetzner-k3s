@@ -27,6 +27,8 @@ module Kubernetes
       @default_ssh_keys = default_ssh_keys
       @cluster_name = configuration['cluster_name']
 
+      prepare_ssh_connections
+
       set_up_k3s
 
       update_nodes
@@ -109,6 +111,20 @@ module Kubernetes
                 :kube_controller_manager_args, :kube_cloud_controller_manager_args, :kubelet_args, :kube_proxy_args,
                 :private_ssh_key_path, :public_ssh_key_path, :master_definitions, :worker_definitions, :cluster_name
 
+    def prepare_ssh_connections
+      if masters.size > 1
+        first_master
+        @masters = masters[1..].map do |server|
+          server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}:22"
+          server
+        end
+        @workers = workers.map do |server|
+          server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}:22"
+          server
+        end
+      end
+    end
+
     def set_up_k3s
       set_up_first_master
       set_up_additional_masters
@@ -171,14 +187,14 @@ module Kubernetes
     end
 
     def ensure_ssh_keys(keys)
-      return "#" unless keys.size > 0
+      return '#' unless keys.size > 0
       commands = <<~BASH
-        echo "#{keys[0]["public_key"]} #{keys[0]["name"]}" > .ssh/authorized_keys
+        echo "#{keys[0]['public_key']} #{keys[0]['name']}" > .ssh/authorized_keys
       BASH
       return commands unless keys.size > 1
       commands = keys[1..].map do |key|
         <<~BASH
-          echo "#{key["public_key"]} #{key["name"]}" >> .ssh/authorized_keys
+          echo "#{key['public_key']} #{key['name']}" >> .ssh/authorized_keys
         BASH
       end
       return commands.join("\n")
@@ -196,7 +212,7 @@ module Kubernetes
     end
 
     def first_master
-      masters.first
+      @first_master ||= masters.first
     end
 
     def kube_api_server_args_list
