@@ -30,6 +30,7 @@ class Cluster
     @masters_config = configuration['masters']
     @worker_node_pools = find_worker_node_pools(configuration)
     @additional_server_settings = configuration['additional_server_settings']
+    @additional_server_settings ||= {}
     @masters_location = configuration['location']
     @servers = []
     @ssh_networks = configuration['ssh_allowed_networks']
@@ -164,7 +165,7 @@ class Cluster
     definitions = []
 
     additional_master_settings = JSON.parse(JSON.generate(additional_server_settings))
-    additional_master_settings['public_net']['enable_ipv4'] = false if masters_count > 1
+    additional_master_settings['public_net']['enable_ipv4'] = false if masters_count > 1 && !additional_master_settings['public_net'].nil?
 
     additional_first_master_settings = JSON.parse(JSON.generate(additional_server_settings))
     additional_first_master_settings['public_net']['enable_ipv4'] = true unless additional_master_settings['public_net'].nil? || additional_master_settings['public_net']['enable_ipv4'].nil?
@@ -303,7 +304,7 @@ class Cluster
 
       Thread.new do
         server = Hetzner::Server.new(hetzner_client: hetzner_client, cluster_name: cluster_name).create(**config)
-        server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}" if masters_count > 1
+        server['_jumphost'] = first_master.dig('public_net', 'ipv4', 'ip') if masters_count > 1
         servers << server
       end
     end

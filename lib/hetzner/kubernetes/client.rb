@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+require 'net/http'
+require 'uri'
+require 'json'
+require 'open-uri'
+require 'tempfile'
 require_relative '../utils'
 
 module Kubernetes
@@ -113,29 +118,60 @@ module Kubernetes
 
     def prepare_ssh_connections
       if masters.size > 1
-        first_master
-        @masters = masters[1..].map do |server|
-          server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}:22"
+        master_1 = @masters.first
+        @masters = masters.map do |server|
+          server['_jumphost'] = master_1.dig('public_net', 'ipv4', 'ip')
           server
         end
+
         @workers = workers.map do |server|
-          server['_jumphost'] = "#{first_master.dig('public_net', 'ipv4', 'ip')}:22"
+          server['_jumphost'] = master_1.dig('public_net', 'ipv4', 'ip')
           server
         end
+
+        @masters[0]['_jumphost'] = nil
       end
     end
 
     def set_up_k3s
-      set_up_first_master
-      set_up_additional_masters
-      set_up_workers
+      k3s_install_script_uri = URI.parse('https://get.k3s.io')
+      k3s_install_script_response = Net::HTTP.get_response(k3s_install_script_uri)
+
+      k3s_install_script_contents = k3s_install_script_response.body
+
+      k3s_install_script = Tempfile.new('k3s_install_script')
+      k3s_install_script.write(k3s_install_script_contents)
+      k3s_install_script.rewind
+
+      k3s_latest_release = URI.parse('https://api.github.com/repos/k3s-io/k3s/releases/latest')
+      k3s_binary_response = Net::HTTP.get_response(k3s_latest_release)
+
+      k3s_binary_contents = k3s_binary_response.body
+
+      k3s_latest_version = JSON.parse(k3s_binary_contents)['tag_name']
+
+      k3s_binary = Tempfile.new('k3s_binary')
+      k3s_binary.write(URI.parse("https://github.com/k3s-io/k3s/releases/download/#{k3s_latest_version}/k3s").read)
+      k3s_binary.rewind
+
+      puts master_install_script(first_master)
+
+      set_up_first_master(k3s_binary, k3s_install_script)
+      set_up_additional_masters(k3s_binary, k3s_install_script)
+      set_up_workers(k3s_binary, k3s_install_script)
+
+      k3s_install_script.close
+      k3s_install_script.unlink
+
+      k3s_binary.close
+      k3s_binary.unlink
     end
 
-    def set_up_first_master
+    def set_up_first_master(k3s_binary, install_script)
       puts
       puts "Deploying k3s to first master (#{first_master['name']})..."
 
-      ssh first_master, master_install_script(first_master), print_output: true
+      ssh(first_master, master_install_script(first_master), scp_files: { "#{k3s_binary.path}" => '/usr/local/bin/k3s', "#{install_script.path}" => '/root/install_k3s.sh' }, print_output: true)
       ssh first_master, ensure_ssh_keys(default_ssh_keys)
 
       puts
@@ -149,7 +185,7 @@ module Kubernetes
       save_kubeconfig
     end
 
-    def set_up_additional_masters
+    def set_up_additional_masters(k3s_binary, install_script)
       return unless masters.size > 1
 
       threads = masters[1..].map do |master|
@@ -157,7 +193,7 @@ module Kubernetes
           puts
           puts "Deploying k3s to master #{master['name']}..."
 
-          ssh master, master_install_script(master), print_output: true
+          ssh(master, master_install_script(master), scp_files: { "#{k3s_binary.path}" => '/usr/local/bin/k3s', "#{install_script.path}" => '/root/install_k3s.sh' }, print_output: true)
           ssh master, ensure_ssh_keys(default_ssh_keys)
 
           puts
@@ -168,13 +204,13 @@ module Kubernetes
       threads.each(&:join) unless threads.empty?
     end
 
-    def set_up_workers
+    def set_up_workers(k3s_binary, install_script)
       threads = workers.map do |worker|
         Thread.new do
           puts
           puts "Deploying k3s to worker (#{worker['name']})..."
 
-          ssh worker, worker_install_script(worker), print_output: true
+          ssh(worker, worker_install_script(worker), scp_files: { "#{k3s_binary.path}" => '/usr/local/bin/k3s', "#{install_script.path}" => '/root/install_k3s.sh' }, print_output: true)
 
           ssh worker, ensure_ssh_keys(default_ssh_keys)
 
@@ -266,7 +302,7 @@ module Kubernetes
     def api_server_ip
       return @api_server_ip if @api_server_ip
 
-      @api_server_ip = if masters.size > 1
+      @api_server_ip ||= if masters.size > 1
           load_balancer_name = "#{cluster_name}-api"
           load_balancer = hetzner_client.get('/load_balancers')['load_balancers'].detect do |lb|
             lb['name'] == load_balancer_name
@@ -278,7 +314,7 @@ module Kubernetes
     end
 
     def master_install_script(master)
-      server = master == first_master ? ' --cluster-init ' : " --server https://#{api_server_ip}:6443 "
+      server = master == first_master ? ' --cluster-init ' : " --server https://#{masters.any? { |m_srv| m_srv.dig('public_net', 'ipv4').nil? } ? first_master_private_ip : api_server_ip}:6443 "
       flannel_interface = find_flannel_interface(master)
       enable_encryption = configuration.fetch('enable_encryption', false)
       flannel_wireguard = if enable_encryption
@@ -293,9 +329,13 @@ module Kubernetes
 
       extra_args = "#{kube_api_server_args_list} #{kube_scheduler_args_list} #{kube_controller_manager_args_list} #{kube_cloud_controller_manager_args_list} #{kubelet_args_list} #{kube_proxy_args_list}"
       taint = schedule_workloads_on_masters? ? ' ' : ' --node-taint CriticalAddonsOnly=true:NoExecute '
+      external_ip_arg = master.dig('public_net', 'ipv4').nil? ? '' : "--node-external-ip=$(hostname -I | awk '{print $1}')"
+      private_ip_awk_column = master.dig('public_net', 'ipv4').nil? ? '$1' : '$2'
 
       <<~SCRIPT
-        curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION="#{k3s_version}" K3S_TOKEN="#{k3s_token}" INSTALL_K3S_EXEC="server \
+        chmod +x /usr/local/bin/k3s;
+        chmod +x /root/install_k3s.sh;
+        INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_VERSION='#{k3s_version}' K3S_TOKEN='#{k3s_token}' INSTALL_K3S_EXEC="server \
           --disable-cloud-controller \
           --disable servicelb \
           --disable traefik \
@@ -311,24 +351,30 @@ module Kubernetes
           --kube-scheduler-arg="bind-address=0.0.0.0" \
           #{taint} #{extra_args} \
           --kubelet-arg="cloud-provider=external" \
-          --advertise-address=$(hostname -I | awk '{print $2}') \
-          --node-ip=$(hostname -I | awk '{print $2}') \
-          --node-external-ip=$(hostname -I | awk '{print $1}') \
+          --advertise-address=$(hostname -I | awk '{print #{private_ip_awk_column}}') \
+          --node-ip=$(hostname -I | awk '{print #{private_ip_awk_column}}') \
+          #{external_ip_arg} \
           --flannel-iface=#{flannel_interface} \
-          #{server} #{tls_sans}" sh -
+          #{server} #{tls_sans}" sh /root/install_k3s.sh;
+        systemctl start k3s.service
       SCRIPT
     end
 
     def worker_install_script(worker)
       flannel_interface = find_flannel_interface(worker)
+      external_ip_arg = worker.dig('public_net', 'ipv4').nil? ? '' : "--node-external-ip=$(hostname -I | awk '{print $1}')"
+      private_ip_awk_column = worker.dig('public_net', 'ipv4').nil? ? '$1' : '$2'
 
       <<~BASH
-        curl -sfL https://get.k3s.io | K3S_TOKEN="#{k3s_token}" INSTALL_K3S_VERSION="#{k3s_version}" K3S_URL=https://#{first_master_private_ip}:6443 INSTALL_K3S_EXEC="agent \
+        chmod +x /usr/local/bin/k3s;
+        chmod +x /root/install_k3s.sh;
+        INSTALL_K3S_SKIP_DOWNLOAD=true K3S_TOKEN='#{k3s_token}' INSTALL_K3S_VERSION='#{k3s_version}' K3S_URL='https://#{first_master_private_ip}:6443' INSTALL_K3S_EXEC="agent \
           --node-name="$(hostname -f)" \
           --kubelet-arg="cloud-provider=external" \
-          --node-ip=$(hostname -I | awk '{print $2}') \
-          --node-external-ip=$(hostname -I | awk '{print $1}') \
-          --flannel-iface=#{flannel_interface}" sh -
+          --node-ip=$(hostname -I | awk '{print #{private_ip_awk_column}}') \
+          #{external_ip_arg} \
+          --flannel-iface=#{flannel_interface}" sh /root/install_k3s.sh;
+        systemctl start k3s-agent.service
       BASH
     end
 
@@ -346,6 +392,10 @@ module Kubernetes
 
     def first_master_public_ip
       @first_master_public_ip ||= first_master.dig('public_net', 'ipv4', 'ip')
+    end
+
+    def first_master_private_ip
+      @first_master_private_ip ||= first_master.dig('private_net', 0, 'ip')
     end
 
     def save_kubeconfig

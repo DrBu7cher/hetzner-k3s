@@ -2,6 +2,7 @@
 
 require 'childprocess'
 require 'net/ssh/proxy/command'
+require 'net/scp'
 
 module Utils
   CMD_FILE_PATH = '/tmp/cli.cmd'
@@ -70,7 +71,7 @@ module Utils
     retry if retries <= 15
   end
 
-  def ssh(server, command, print_output: false)
+  def ssh(server, command, scp_files: nil, print_output: false)
     debug = ENV.fetch('SSH_DEBUG', false)
 
     retries ||= 0
@@ -83,13 +84,16 @@ module Utils
     params[:verbose] = :debug if debug
 
     if server['_jumphost']
-      params[:proxy] = Net::SSH::Proxy::Command.new('ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -l root -p 22 -W %h:%p 88.99.39.65 2>/dev/null')
+      params[:proxy] = Net::SSH::Proxy::Command.new("ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -W %h:%p -p 22 root@#{server['_jumphost']} 2>/dev/null")
       target_ip = server.dig('private_net', 0, 'ip')
     else
       target_ip = server.dig('public_net', 'ipv4', 'ip')
     end
 
     Net::SSH.start(target_ip, 'root', params) do |session|
+      scp_files.each do |from, to|
+        session.scp.upload!("#{from}", "#{to}")
+      end if scp_files
       session.exec!(command) do |_channel, _stream, data|
         output = "#{output}#{data}"
         puts data if print_output
