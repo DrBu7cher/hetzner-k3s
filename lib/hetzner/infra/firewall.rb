@@ -14,9 +14,10 @@ module Hetzner
       puts
 
       if (firewall = find_firewall)
-        puts 'Firewall already exists, skipping.'
+        puts 'Firewall already exists, ensuring rules are correct.'
+        response = hetzner_client.post("/firewalls/#{firewall['id']}/actions/set_rules", create_firewall_config).body
         puts
-        return firewall
+        return find_firewall
       end
 
       puts 'Creating firewall...'
@@ -57,7 +58,7 @@ module Hetzner
           protocol: 'tcp',
           port: '22',
           source_ips: ssh_networks,
-          destination_ips: []
+          destination_ips: [],
         },
         {
           description: 'Allow ICMP (ping)',
@@ -66,9 +67,9 @@ module Hetzner
           port: nil,
           source_ips: [
             '0.0.0.0/0',
-            '::/0'
+            '::/0',
           ],
-          destination_ips: []
+          destination_ips: [],
         },
         {
           description: 'Allow all TCP traffic between nodes on the private network',
@@ -76,9 +77,9 @@ module Hetzner
           protocol: 'tcp',
           port: 'any',
           source_ips: [
-            '10.0.0.0/16'
+            '10.0.0.0/16',
           ],
-          destination_ips: []
+          destination_ips: [],
         },
         {
           description: 'Allow all UDP traffic between nodes on the private network',
@@ -86,10 +87,10 @@ module Hetzner
           protocol: 'udp',
           port: 'any',
           source_ips: [
-            '10.0.0.0/16'
+            '10.0.0.0/16',
           ],
-          destination_ips: []
-        }
+          destination_ips: [],
+        },
       ]
 
       unless high_availability
@@ -99,13 +100,13 @@ module Hetzner
           protocol: 'tcp',
           port: '6443',
           source_ips: api_networks,
-          destination_ips: []
+          destination_ips: [],
         }
       end
 
       {
         name: cluster_name,
-        rules: rules
+        rules: rules,
       }
     end
 
@@ -114,11 +115,11 @@ module Hetzner
         remove_from: [
           {
             server: {
-              id: server_id
+              id: server_id,
             },
-            type: 'server'
-          }
-        ]
+            type: 'server',
+          },
+        ],
       }
     end
 
